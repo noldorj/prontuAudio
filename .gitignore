@@ -1,0 +1,11 @@
+# Ignorar arquivos de log
+*.log
+
+# Ignorar pastas de build
+/openvino_cache
+/transcricoes/*/
+/audios/*/
+
+
+# Ignorar arquivos de configuração local
+config/local.json
