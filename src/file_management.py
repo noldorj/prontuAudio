@@ -2,6 +2,8 @@ import os
 import json
 import logging
 import gradio as gr
+from utils import get_metadata
+from modelConfig import *
 
 logging.basicConfig(
     level=logging.INFO,
@@ -9,6 +11,17 @@ logging.basicConfig(
 )
 
 BASE_TRANSCRICOES_DIR = os.path.abspath(os.path.join(os.getcwd(), "..", "transcricoes"))
+
+def save_transcription_to_file():
+    global current_transcription_file
+    metadata = get_metadata(patient_name_global)
+    data_to_save = {"metadata": metadata, "transcription": transcription_data}
+    try:
+        with open(current_transcription_file, "w", encoding="utf-8") as f:
+            json.dump(data_to_save, f, ensure_ascii=False, indent=4)
+        logging.info("Transcription saved successfully at %s", current_transcription_file)
+    except Exception as e:
+        logging.exception("Error saving transcription:")
 
 def listar_transcricoes():
     """

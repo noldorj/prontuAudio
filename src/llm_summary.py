@@ -69,7 +69,8 @@ Transcrição completa:
             ],
             temperature=0.7,
         )
-        summary = response["choices"][0]["message"]["content"].strip()
+        summary = response.choices[0].message.content.strip()
+
         return summary
     except Exception as e:
         logging.exception("Erro ao gerar resumo do prontuário:")
