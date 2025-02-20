@@ -17,26 +17,20 @@ from openai import OpenAI
 from pydub import AudioSegment  # Para conversão de áudio
 import librosa  # Para reamostragem
 
+from llm_summary import gerarResumoProntuario
+
+from file_management import listar_transcricoes, atualizar_lista_transcricoes, selecionar_transcricao
+
+from modelConfig import *
+
+
 # Configuração do logging para incluir nome do arquivo e número da linha
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
 )
 
-# Variáveis que definem os modelos para a OpenAI e para LLM local (para resumo)
-model_openai = "gpt-4o"  # Modelo a ser utilizado pela OpenAI para gerar resumos
-model_local_llm = "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"  # Exemplo para LLM local
 
-# Variável de identificação do modelo de ASR
-# model_id = "openai/whisper-small"
-# model_id = "openai/whisper-medium"
-model_id = "openai/whisper-large-v3-turbo"
-
-# Variável global que define o tempo dos chunks (em segundos)
-chunk_tempo = 30
-
-# Variável para definir se o OpenVINO será utilizado (False por padrão)
-USE_OPENVINO = False
 
 # Suprime DeprecationWarnings, se desejar
 import warnings
@@ -125,7 +119,6 @@ def save_transcription_to_file():
 
 
 # ==================== Funções para Transcrição em Tempo Real ====================
-
 def audio_recorder():
     """Grava áudio em tempo real em blocos de chunk_tempo segundos e coloca os arquivos na fila."""
     chunk_duration = chunk_tempo  # segundos
@@ -648,144 +641,7 @@ def transcricaoArquivo(file_path, patient_name, method):
 
 from openai import ChatCompletion
 
-def gerarResumoProntuario(transcricao):
-    """
-    Recebe a transcrição completa e gera um resumo do prontuário com os seguintes tópicos:
 
-    **Dados do Paciente**
-    - Nome do paciente, data da consulta (formato DD/MM/AAAA) e horário (formato HH:MM).
-    - Nome do acompanhante (se identificado).
-
-    **Medicação em Uso**
-    - Liste os nomes e as doses dos medicamentos que o paciente está utilizando.
-
-    **Exames Recentes**
-    - Liste os exames realizados e apresentados durante a consulta.
-
-    **Exames a Marcar**
-    - Liste os exames pedidos e, se informado, a data da próxima consulta sugerida.
-
-    **Resumo da Consulta**
-    - Resuma os principais problemas relatados, possíveis diagnósticos e pontos de atenção.
-
-    **Sugestão de Diagnóstico**
-    - Sugira um diagnóstico para apoio ao médico, indicando exames, procedimentos e pontos de atenção.
-
-    Esta função utiliza a API de ChatCompletion da OpenAI com o modelo definido em model_openai para gerar o resumo.
-    """
-    prompt = f"""Você é um especialista em medicina e análise de dados clínicos. Abaixo está a transcrição completa de uma consulta médica.
-Por favor, gere um resumo do prontuário seguindo estes tópicos:
-
-### Dados do Paciente
-- Nome do paciente, data da consulta (formato DD/MM/AAAA) e horário (formato HH:MM).
-- Nome do acompanhante (se identificado).
-
-### Medicação em Uso
-- Liste os nomes e as doses dos medicamentos que o paciente está utilizando.
-
-### Exames Recentes
-- Liste os exames realizados e apresentados durante a consulta.
-
-### Exames a Marcar
-- Liste os exames pedidos e, se informado, a data da próxima consulta sugerida.
-
-### Resumo da Consulta
-- Resuma os principais problemas relatados, possíveis diagnósticos e pontos de atenção.
-
-### Sugestão de Diagnóstico
-- Sugira um diagnóstico para apoio ao médico, indicando exames, procedimentos e pontos de atenção.
-
-Transcrição completa:
-{transcricao}
-"""
-    try:
-        client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
-        response = client.chat.completions.create(
-            model=model_openai,
-            messages=[
-                {"role": "system", "content": "Você é um especialista em medicina e análise de dados clínicos."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.7,
-        )
-        summary = response["choices"][0]["message"]["content"].strip()
-        return summary
-    except Exception as e:
-        logging.exception("Erro ao gerar resumo do prontuário:")
-        return f"Erro ao gerar resumo: {e}"
-
-
-def listar_transcricoes():
-    """
-    Lê a pasta BASE_TRANSCRICOES_DIR e, se houver subpastas, navega por elas para encontrar arquivos .json.
-    Retorna um dicionário onde as chaves são labels no formato "NomeDaPasta - NomeArquivo" e os valores são os caminhos completos.
-    """
-    mapping = {}
-    logging.info("Iniciando a listagem de transcrições em: %s", BASE_TRANSCRICOES_DIR)
-    try:
-        # Verifica arquivos .json na raiz de BASE_TRANSCRICOES_DIR
-        for file in os.listdir(BASE_TRANSCRICOES_DIR):
-            full_path = os.path.join(BASE_TRANSCRICOES_DIR, file)
-            if os.path.isfile(full_path) and file.endswith(".json"):
-                logging.info("Arquivo encontrado na raiz: %s", full_path)
-                mapping[file] = full_path
-
-        # Verifica cada subpasta
-        for subdir in os.listdir(BASE_TRANSCRICOES_DIR):
-            subdir_path = os.path.join(BASE_TRANSCRICOES_DIR, subdir)
-            if os.path.isdir(subdir_path):
-                logging.info("Subpasta encontrada: %s", subdir_path)
-                for file in os.listdir(subdir_path):
-                    if file.endswith(".json"):
-                        full_path = os.path.join(subdir_path, file)
-                        logging.info("Arquivo encontrado na subpasta %s: %s", subdir, full_path)
-                        label = f"{subdir} - {file}"
-                        mapping[label] = full_path
-    except Exception as e:
-        logging.exception("Erro ao listar transcrições:")
-    logging.info("Mapeamento final de transcrições: %s", mapping)
-    return mapping
-
-
-def atualizar_lista_transcricoes():
-    """
-    Returns an updated value for the Dropdown component containing the list of transcription labels.
-    """
-    logging.info("Atualizando lista de transcrições.")
-    mapping = listar_transcricoes()
-    choices = list(mapping.keys())
-    logging.info("Lista de transcrições encontrada: %s", choices)
-    # Use gr.update() to update the choices and reset the value to the first choice (or empty if no choices)
-    return gr.update(choices=choices, value=choices[0] if choices else "")
-
-
-
-
-def selecionar_transcricao(label):
-    """
-    Dado o label de uma transcrição, lê o arquivo JSON correspondente e retorna a transcrição.
-    Se o label for uma lista, utiliza o primeiro elemento.
-    """
-    logging.info("Selecionando transcrição para o label: %s", label)
-    if isinstance(label, list):
-        label = label[0]
-        logging.info("Label convertido de lista para string: %s", label)
-    mapping = listar_transcricoes()
-    if label in mapping:
-        file_path = mapping[label]
-        logging.info("Arquivo correspondente encontrado: %s", file_path)
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                transcription = data.get("transcription", "")
-                logging.info("Transcrição carregada com sucesso.")
-                return transcription
-        except Exception as e:
-            logging.exception("Erro ao ler a transcrição do arquivo:")
-            return f"Erro: {e}"
-    else:
-        logging.error("Label '%s' não encontrado no mapeamento de transcrições.", label)
-        return "Transcrição não encontrada."
 
 
 def gerarResumoDoArquivo(label):
