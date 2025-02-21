@@ -23,8 +23,10 @@ load_dotenv()
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # Diretórios base
-BASE_TRANSCRICOES_DIR = "../transcricoes"
-BASE_AUDIOS_DIR = "../audios"
+BASE_TRANSCRICOES_DIR = os.path.abspath(os.path.join(os.getcwd(), ".", "transcricoes"))
+
+BASE_AUDIOS_DIR = os.path.abspath(os.path.join(os.getcwd(), ".", "audios"))
+DOWNLOADS_DIR = os.path.abspath(os.path.join(os.getcwd(), ".", "downloads"))
 os.makedirs(BASE_TRANSCRICOES_DIR, exist_ok=True)
 os.makedirs(BASE_AUDIOS_DIR, exist_ok=True)
 logging.info("Absolute path for transcriptions: %s", os.path.abspath(BASE_TRANSCRICOES_DIR))
@@ -32,13 +34,12 @@ logging.info("Absolute path for transcriptions: %s", os.path.abspath(BASE_TRANSC
 # Variáveis globais para transcrição em tempo real
 transcription_data = []  # Lista dos segmentos transcritos
 
-
-
 # Variáveis globais para informações do paciente
 patient_name_global = ""
 current_transcription_file = ""
 patient_audio_folder = ""  # Pasta para salvar arquivos de áudio do paciente
 patient_trans_folder = ""  # Pasta para salvar arquivos JSON de transcrições
+
 
 # Variável global para armazenar o pipeline ASR local
 local_asr_pipeline = None

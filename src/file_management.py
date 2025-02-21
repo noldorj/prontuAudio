@@ -1,19 +1,33 @@
+import datetime
 import os
 import json
 import logging
 import gradio as gr
 from utils import get_metadata
-from modelConfig import *
+from modelConfig import (BASE_TRANSCRICOES_DIR, BASE_AUDIOS_DIR, transcription_data,
+                         patient_name_global, current_transcription_file, DOWNLOADS_DIR,
+                         patient_audio_folder, patient_trans_folder, local_asr_pipeline
+                         )
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
 )
 
-BASE_TRANSCRICOES_DIR = os.path.abspath(os.path.join(os.getcwd(), "..", "transcricoes"))
 
-def save_transcription_to_file():
-    global current_transcription_file
+def save_transcription_to_file(patient_name):
+    global current_transcription_file, patient_name_global, patient_trans_folder
+
+    patient_name_global = patient_name.strip() if patient_name.strip() else "paciente"
+
+    patient_trans_folder = os.path.join(BASE_TRANSCRICOES_DIR, patient_name_global)
+    os.makedirs(patient_trans_folder, exist_ok=True)
+
+    # Cria o caminho do arquivo dentro da subpasta do paciente
+    current_transcription_file = os.path.join(
+        patient_trans_folder,
+        f"transcricao_{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.json"
+    )
     metadata = get_metadata(patient_name_global)
     data_to_save = {"metadata": metadata, "transcription": transcription_data}
     try:
@@ -22,6 +36,7 @@ def save_transcription_to_file():
         logging.info("Transcription saved successfully at %s", current_transcription_file)
     except Exception as e:
         logging.exception("Error saving transcription:")
+
 
 def listar_transcricoes():
     """
