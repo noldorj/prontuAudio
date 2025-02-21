@@ -13,6 +13,8 @@ import soundfile as sf
 import gradio as gr
 import librosa  # Para reamostragem
 
+from transformers import WhisperProcessor, WhisperForConditionalGeneration
+
 from openai import OpenAI
 from llm_summary import gerarResumoProntuario
 from file_management import listar_transcricoes, atualizar_lista_transcricoes, selecionar_transcricao, \
@@ -40,12 +42,9 @@ local_asr_pipeline = None
 audio_thread = None
 transcription_thread = None
 
-
-
-
 # Configuração do logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
 )
 import warnings
@@ -87,7 +86,7 @@ def audio_recorder():
 
 
 def transcription_worker(method="openai"):
-
+    global local_asr_pipeline
     # if current_transcription_file == "":
     #     current_transcription_file = os.path.join(
     #         patient_trans_folder,
@@ -187,28 +186,32 @@ def get_transcription(patient_name):
 
 
 def load_local_model_generator():
+    global local_asr_pipeline
 
     try:
-        yield "Modelo de IA sendo carregado... 0%"
+        yield "IA para transcrição de áudio sendo carregada... 0%"
         time.sleep(0.5)
-        from transformers import WhisperProcessor, WhisperForConditionalGeneration
         processor = WhisperProcessor.from_pretrained(model_id)
+        # Ajusta o token de preenchimento para evitar conflitos com o token eos
+        if processor.tokenizer.pad_token is None or processor.tokenizer.pad_token == processor.tokenizer.eos_token:
+            processor.tokenizer.pad_token = "<pad>"
         model = WhisperForConditionalGeneration.from_pretrained(model_id)
         forced_decoder_ids = processor.tokenizer.get_decoder_prompt_ids(language="portuguese", task="transcribe")
         local_asr_pipeline = {"model": model, "processor": processor, "tokenizer": processor.tokenizer}
-        yield "Modelo de IA carregado com sucesso (fallback)!"
-        yield "Modelo de IA carregado com sucesso!"
+        yield "Carregado com sucesso!"
     except Exception as e:
-        yield f"Erro ao carregar modelo local: {e}"
+        yield f"Erro ao carregar modelo de IA, tente via OpenAI com sua API: {e}"
         try:
-            from transformers import WhisperProcessor, WhisperForConditionalGeneration
             processor = WhisperProcessor.from_pretrained(model_id)
+            if processor.tokenizer.pad_token is None or processor.tokenizer.pad_token == processor.tokenizer.eos_token:
+                processor.tokenizer.pad_token = "<pad>"
             model = WhisperForConditionalGeneration.from_pretrained(model_id)
             forced_decoder_ids = processor.tokenizer.get_decoder_prompt_ids(language="portuguese", task="transcribe")
             local_asr_pipeline = {"model": model, "processor": processor, "tokenizer": processor.tokenizer}
-            yield "Modelo de IA carregado com sucesso na CPU (fallback)!"
+            yield "Modelo de IA carregado com sucesso na CPU!"
         except Exception as fallback_error:
             yield f"Erro no fallback ao carregar modelo: {fallback_error}"
+
 
 
 def start_consulta(patient_name, method):
@@ -222,6 +225,8 @@ def start_consulta(patient_name, method):
 
 
 def transcricaoArquivo(file_path, patient_name, method):
+    global local_asr_pipeline
+    global patient_name_global, current_transcription_file
 
     patient_name_global = patient_name.strip() if patient_name.strip() else "paciente"
     patient_audio_folder_local = os.path.join(BASE_AUDIOS_DIR, patient_name_global)
@@ -262,7 +267,7 @@ def transcricaoArquivo(file_path, patient_name, method):
         if method == "openai":
             text = transcribe_openai(seg)
         else:
-            global local_asr_pipeline
+
             if local_asr_pipeline is None:
                 from transformers import WhisperProcessor, WhisperForConditionalGeneration
                 processor = WhisperProcessor.from_pretrained(model_id)
@@ -320,13 +325,12 @@ def save_summary_as_pdf_in_dir(summary, chosen_dir):
         return f"Erro ao salvar resumo em PDF: {e}"
 
 
-# Função que será chamada ao clicar no botão de "Gerar PDF"
 def generate_pdf_with_directory(resumo, chosen_dir):
     if not chosen_dir.strip():
         return "<p style='color:red;'>Por favor, escolha um diretório primeiro.</p>"
 
     if not resumo.strip():
-        return "Nenhum resumo para salvar em PDF."
+        return "<p style='color:red;'>Nenhum resumo para salvar em PDF.</p>"
 
     result = save_summary_as_pdf_in_dir(resumo, chosen_dir)
 
@@ -337,10 +341,13 @@ def generate_pdf_with_directory(resumo, chosen_dir):
             pdf_bytes = f.read()
             b64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
             html_link = f'<a href="data:application/pdf;base64,{b64_pdf}" download="{os.path.basename(result)}">Baixar PDF</a>'
-        return html_link
+        # Retorna a mensagem de sucesso e o link de download
+        return f"<p style='color:green;'>Resumo gerado com sucesso!</p>{html_link}"
     except Exception as e:
         logging.exception("Erro ao gerar link de download:")
         return f"<p style='color:red;'>Erro ao gerar link de download: {e}</p>"
+
+
 
 
 # ==================== INTERFACE GRADIO ====================
@@ -434,7 +441,6 @@ with gr.Blocks() as demo:
 if __name__ == "__main__":
     def start_gradio():
         demo.launch(server_name="127.0.0.1", server_port=7860, share=False, inline=False)
-
 
     gradio_thread = threading.Thread(target=start_gradio, daemon=True)
     gradio_thread.start()
