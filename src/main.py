@@ -17,16 +17,31 @@ from openai import OpenAI
 from llm_summary import gerarResumoProntuario
 from file_management import listar_transcricoes, atualizar_lista_transcricoes, selecionar_transcricao, \
     save_transcription_to_file
-from modelConfig import (BASE_TRANSCRICOES_DIR, BASE_AUDIOS_DIR, transcription_data,
-                         patient_name_global, current_transcription_file, DOWNLOADS_DIR,
-                         patient_audio_folder, patient_trans_folder, local_asr_pipeline, chunk_tempo
-                         )
+from modelConfig import (BASE_TRANSCRICOES_DIR, BASE_AUDIOS_DIR,DOWNLOADS_DIR,
+                         chunk_tempo, model_id )
 
 from utils import get_metadata, convert_to_wav
 from transcription import transcribe_openai, transcribe_local
 
 # Biblioteca para gerar PDF
 from fpdf import FPDF
+
+# Variáveis globais para transcrição em tempo real
+transcription_data = []  # Lista dos segmentos transcritos
+
+# Variáveis globais para informações do paciente
+patient_name_global = ""
+current_transcription_file = ""
+patient_audio_folder = ""  # Pasta para salvar arquivos de áudio do paciente
+patient_trans_folder = ""  # Pasta para salvar arquivos JSON de transcrições
+# Variável global para armazenar o pipeline ASR local
+local_asr_pipeline = None
+
+audio_thread = None
+transcription_thread = None
+
+
+
 
 # Configuração do logging
 logging.basicConfig(
@@ -53,7 +68,7 @@ transcription_lock = threading.Lock()
 
 def audio_recorder():
     chunk_duration = chunk_tempo
-    global patient_audio_folder
+
     samplerate = 16000
     channels = 1
     while recording_running.is_set():
@@ -72,7 +87,13 @@ def audio_recorder():
 
 
 def transcription_worker(method="openai"):
-    global local_asr_pipeline, transcription_data
+
+    # if current_transcription_file == "":
+    #     current_transcription_file = os.path.join(
+    #         patient_trans_folder,
+    #         f"transcricao_{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.json"
+    #     )
+
     asr_pipeline = None
     if method == "local":
         if local_asr_pipeline is None:
@@ -92,22 +113,29 @@ def transcription_worker(method="openai"):
                    "text": transcription}
         with transcription_lock:
             transcription_data.append(segment)
-        save_transcription_to_file(patient_name_global)
+
+        # print("transcription_worker:: save transcription")
+        # print(f"current_transcription_file: {current_transcription_file}")
+        # print(f"patient_name_global: {patient_name_global}")
+        # print(f"transcription_data: {transcription_data}")
+
+        save_transcription_to_file(patient_name_global, transcription_data, current_transcription_file)
         audio_queue.task_done()
 
 
 def start_process(patient_name, method):
     logging.info("Setting up directories for patient '%s'", patient_name)
-    global patient_name_global, current_transcription_file, transcription_data, audio_thread, transcription_thread
+    global patient_name_global, current_transcription_file, transcription_data
     global patient_audio_folder, patient_trans_folder
-
+    global audio_thread, transcription_thread
 
     patient_name_global = patient_name.strip() if patient_name.strip() else "paciente"
     transcription_data = []
     patient_audio_folder = os.path.join(BASE_AUDIOS_DIR, patient_name_global)
     os.makedirs(patient_audio_folder, exist_ok=True)
-    # Converte BASE_TRANSCRICOES_DIR para um caminho absoluto
-    patient_trans_folder = os.path.join(os.path.abspath(BASE_TRANSCRICOES_DIR), patient_name_global)
+
+
+    patient_trans_folder = os.path.join(BASE_TRANSCRICOES_DIR, patient_name_global)
     os.makedirs(patient_trans_folder, exist_ok=True)
 
     current_transcription_file = os.path.join(
@@ -115,13 +143,16 @@ def start_process(patient_name, method):
         f"transcricao_{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.json"
     )
 
-    save_transcription_to_file(patient_name)
+    # print("start process:: save transcription")
+    # print(f"current_transcription_file: {current_transcription_file}")
+    save_transcription_to_file(patient_name, transcription_data, current_transcription_file)
+
     recording_running.set()
     transcription_running.set()
-    global audio_thread
+
     audio_thread = threading.Thread(target=audio_recorder, daemon=True)
     audio_thread.start()
-    global transcription_thread
+
     transcription_thread = threading.Thread(target=transcription_worker, args=(method,), daemon=True)
     transcription_thread.start()
     logging.info("Process started.")
@@ -156,7 +187,7 @@ def get_transcription(patient_name):
 
 
 def load_local_model_generator():
-    global local_asr_pipeline, model_id
+
     try:
         yield "Modelo de IA sendo carregado... 0%"
         time.sleep(0.5)
@@ -191,16 +222,17 @@ def start_consulta(patient_name, method):
 
 
 def transcricaoArquivo(file_path, patient_name, method):
-    global patient_name_global, current_transcription_file, patient_audio_folder_local
-    global patient_trans_folder_local
 
     patient_name_global = patient_name.strip() if patient_name.strip() else "paciente"
     patient_audio_folder_local = os.path.join(BASE_AUDIOS_DIR, patient_name_global)
     os.makedirs(patient_audio_folder_local, exist_ok=True)
+
     patient_trans_folder_local = os.path.join(BASE_TRANSCRICOES_DIR, patient_name_global)
     os.makedirs(patient_trans_folder_local, exist_ok=True)
+
     current_transcription_file = os.path.join(
         patient_trans_folder_local, f"transcricao_completa_{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.json")
+
     ext = os.path.splitext(file_path)[1].lower()
     if ext != ".wav":
         converted_path = os.path.join(patient_audio_folder_local, f"converted_{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.wav")
@@ -319,8 +351,15 @@ def start_consulta_interface(patient_name, method):
     return start_consulta(patient_name, method)
 
 def stop_and_show_transcription(patient_name):
-    if not patient_name.strip():
+
+    if not patient_name_global.strip():
         return "A consulta não iniciou, preencha o Nome do Paciente e clique em iniciar a consulta."
+
+    """Stops the consultation and returns the final complete transcription."""
+    stop_msg = stop_process(patient_name)
+    final_transcription = get_transcription(patient_name)
+    return stop_msg + "\n\nTranscrição Final:\n" + final_transcription
+
 
 def start_transcricao_interface(file_obj, patient_name, method):
     if not patient_name.strip():

@@ -2,8 +2,6 @@ import datetime
 import logging
 from pydub import AudioSegment
 
-
-
 def get_metadata(patient_name):
     now = datetime.datetime.now()
     return {

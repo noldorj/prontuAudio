@@ -4,36 +4,26 @@ import json
 import logging
 import gradio as gr
 from utils import get_metadata
-from modelConfig import (BASE_TRANSCRICOES_DIR, BASE_AUDIOS_DIR, transcription_data,
-                         patient_name_global, current_transcription_file, DOWNLOADS_DIR,
-                         patient_audio_folder, patient_trans_folder, local_asr_pipeline
-                         )
+from modelConfig import (BASE_TRANSCRICOES_DIR, BASE_AUDIOS_DIR,
+                         DOWNLOADS_DIR)
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
 )
 
+def save_transcription_to_file(patient_name, transcription_data, current_transcription_file):
 
-def save_transcription_to_file(patient_name):
-    global current_transcription_file, patient_name_global, patient_trans_folder
-
-    patient_name_global = patient_name.strip() if patient_name.strip() else "paciente"
-
-    patient_trans_folder = os.path.join(BASE_TRANSCRICOES_DIR, patient_name_global)
-    os.makedirs(patient_trans_folder, exist_ok=True)
-
-    # Cria o caminho do arquivo dentro da subpasta do paciente
-    current_transcription_file = os.path.join(
-        patient_trans_folder,
-        f"transcricao_{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.json"
-    )
-    metadata = get_metadata(patient_name_global)
+    # Apenas atualize o arquivo existente
+    metadata = get_metadata(patient_name)
     data_to_save = {"metadata": metadata, "transcription": transcription_data}
+
+    print(f"save_transcription_to_file:: current_transcription_file: {current_transcription_file}")
+
     try:
         with open(current_transcription_file, "w", encoding="utf-8") as f:
             json.dump(data_to_save, f, ensure_ascii=False, indent=4)
-        logging.info("Transcription saved successfully at %s", current_transcription_file)
+        logging.info("Transcription updated successfully at %s", current_transcription_file)
     except Exception as e:
         logging.exception("Error saving transcription:")
 
