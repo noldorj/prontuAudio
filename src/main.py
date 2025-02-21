@@ -13,15 +13,11 @@ import soundfile as sf
 import gradio as gr
 import librosa  # Para reamostragem
 
-from transformers import WhisperProcessor, WhisperForConditionalGeneration
-
+import openai  # Importa o módulo openai para verificação da API key
 from openai import OpenAI
 from llm_summary import gerarResumoProntuario
-from file_management import listar_transcricoes, atualizar_lista_transcricoes, selecionar_transcricao, \
-    save_transcription_to_file
-from modelConfig import (BASE_TRANSCRICOES_DIR, BASE_AUDIOS_DIR,DOWNLOADS_DIR,
-                         chunk_tempo, model_id )
-
+from file_management import listar_transcricoes, atualizar_lista_transcricoes, selecionar_transcricao, save_transcription_to_file
+from modelConfig import (BASE_TRANSCRICOES_DIR, BASE_AUDIOS_DIR, DOWNLOADS_DIR, chunk_tempo, model_id)
 from utils import get_metadata, convert_to_wav
 from transcription import transcribe_openai, transcribe_local
 
@@ -36,6 +32,7 @@ patient_name_global = ""
 current_transcription_file = ""
 patient_audio_folder = ""  # Pasta para salvar arquivos de áudio do paciente
 patient_trans_folder = ""  # Pasta para salvar arquivos JSON de transcrições
+
 # Variável global para armazenar o pipeline ASR local
 local_asr_pipeline = None
 
@@ -44,15 +41,14 @@ transcription_thread = None
 
 # Configuração do logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s"
 )
-import warnings
 
+import warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 # Diretório para downloads (se usado para salvar PDFs temporariamente)
-
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 
 audio_queue = queue.Queue()
@@ -63,11 +59,15 @@ transcription_running = threading.Event()
 transcription_lock = threading.Lock()
 
 
+def is_openai_key_configured():
+    """Verifica se a chave OpenAI foi configurada utilizando o módulo openai."""
+    return hasattr(openai, "api_key") and openai.api_key and openai.api_key.strip() != ""
+
+
 # ========= FUNÇÕES DE TRANSCRIÇÃO =========
 
 def audio_recorder():
     chunk_duration = chunk_tempo
-
     samplerate = 16000
     channels = 1
     while recording_running.is_set():
@@ -86,13 +86,6 @@ def audio_recorder():
 
 
 def transcription_worker(method="openai"):
-    global local_asr_pipeline
-    # if current_transcription_file == "":
-    #     current_transcription_file = os.path.join(
-    #         patient_trans_folder,
-    #         f"transcricao_{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.json"
-    #     )
-
     asr_pipeline = None
     if method == "local":
         if local_asr_pipeline is None:
@@ -112,12 +105,6 @@ def transcription_worker(method="openai"):
                    "text": transcription}
         with transcription_lock:
             transcription_data.append(segment)
-
-        # print("transcription_worker:: save transcription")
-        # print(f"current_transcription_file: {current_transcription_file}")
-        # print(f"patient_name_global: {patient_name_global}")
-        # print(f"transcription_data: {transcription_data}")
-
         save_transcription_to_file(patient_name_global, transcription_data, current_transcription_file)
         audio_queue.task_done()
 
@@ -132,8 +119,6 @@ def start_process(patient_name, method):
     transcription_data = []
     patient_audio_folder = os.path.join(BASE_AUDIOS_DIR, patient_name_global)
     os.makedirs(patient_audio_folder, exist_ok=True)
-
-
     patient_trans_folder = os.path.join(BASE_TRANSCRICOES_DIR, patient_name_global)
     os.makedirs(patient_trans_folder, exist_ok=True)
 
@@ -141,9 +126,6 @@ def start_process(patient_name, method):
         patient_trans_folder,
         f"transcricao_{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.json"
     )
-
-    # print("start process:: save transcription")
-    # print(f"current_transcription_file: {current_transcription_file}")
     save_transcription_to_file(patient_name, transcription_data, current_transcription_file)
 
     recording_running.set()
@@ -163,7 +145,6 @@ def stop_process(patient_name):
         return "Consulta ainda não foi iniciada."
 
     logging.info("Process stopped.")
-    #stop_msg = stop_process()
     final_transcription = get_transcription(patient_name_global)
 
     recording_running.clear()
@@ -177,7 +158,6 @@ def stop_process(patient_name):
     return "\n\nTranscrição Final:\n" + final_transcription
 
 
-
 def get_transcription(patient_name):
     if not patient_name.strip():
         return "Consulta ainda não foi iniciada."
@@ -187,12 +167,12 @@ def get_transcription(patient_name):
 
 def load_local_model_generator():
     global local_asr_pipeline
-
     try:
         yield "IA para transcrição de áudio sendo carregada... 0%"
         time.sleep(0.5)
+        from transformers import WhisperProcessor, WhisperForConditionalGeneration
         processor = WhisperProcessor.from_pretrained(model_id)
-        # Ajusta o token de preenchimento para evitar conflitos com o token eos
+        # Ajusta o token de padding para evitar conflitos com o token eos
         if processor.tokenizer.pad_token is None or processor.tokenizer.pad_token == processor.tokenizer.eos_token:
             processor.tokenizer.pad_token = "<pad>"
         model = WhisperForConditionalGeneration.from_pretrained(model_id)
@@ -202,6 +182,7 @@ def load_local_model_generator():
     except Exception as e:
         yield f"Erro ao carregar modelo de IA, tente via OpenAI com sua API: {e}"
         try:
+            from transformers import WhisperProcessor, WhisperForConditionalGeneration
             processor = WhisperProcessor.from_pretrained(model_id)
             if processor.tokenizer.pad_token is None or processor.tokenizer.pad_token == processor.tokenizer.eos_token:
                 processor.tokenizer.pad_token = "<pad>"
@@ -213,8 +194,10 @@ def load_local_model_generator():
             yield f"Erro no fallback ao carregar modelo: {fallback_error}"
 
 
-
 def start_consulta(patient_name, method):
+    # Se o método for OpenAI, verifique se a chave foi configurada
+    if method == "openai" and not is_openai_key_configured():
+        return "A chave da OpenAI não foi configurada. Insira sua chave na aba 'Configurações' ou selecione o método local."
     if method == "local":
         results = list(load_local_model_generator())
         start_process(patient_name, method)
@@ -225,16 +208,15 @@ def start_consulta(patient_name, method):
 
 
 def transcricaoArquivo(file_path, patient_name, method):
-    global local_asr_pipeline
-    global patient_name_global, current_transcription_file
+    # Se o método for OpenAI, verifique se a chave foi configurada
+    if method == "openai" and not is_openai_key_configured():
+        return "A chave da OpenAI não foi configurada. Insira sua chave na aba 'Configurações' ou selecione o método local."
 
     patient_name_global = patient_name.strip() if patient_name.strip() else "paciente"
     patient_audio_folder_local = os.path.join(BASE_AUDIOS_DIR, patient_name_global)
     os.makedirs(patient_audio_folder_local, exist_ok=True)
-
     patient_trans_folder_local = os.path.join(BASE_TRANSCRICOES_DIR, patient_name_global)
     os.makedirs(patient_trans_folder_local, exist_ok=True)
-
     current_transcription_file = os.path.join(
         patient_trans_folder_local, f"transcricao_completa_{datetime.datetime.now().strftime('%Y-%m-%d-%H-%M-%S')}.json")
 
@@ -267,7 +249,7 @@ def transcricaoArquivo(file_path, patient_name, method):
         if method == "openai":
             text = transcribe_openai(seg)
         else:
-
+            global local_asr_pipeline
             if local_asr_pipeline is None:
                 from transformers import WhisperProcessor, WhisperForConditionalGeneration
                 processor = WhisperProcessor.from_pretrained(model_id)
@@ -276,8 +258,7 @@ def transcricaoArquivo(file_path, patient_name, method):
             text = transcribe_local(seg, local_asr_pipeline)
         all_transcriptions.append(text)
         progress = int(((idx + 1) / total_segments) * 100)
-        current_progress = f"Transcrevendo segmento {idx + 1}/{total_segments} ({progress}% concluído)\n" + "\n".join(
-            all_transcriptions)
+        current_progress = f"Transcrevendo segmento {idx + 1}/{total_segments} ({progress}% concluído)\n" + "\n".join(all_transcriptions)
         yield current_progress
     full_transcription = "\n".join(all_transcriptions)
     metadata = get_metadata(patient_name_global)
@@ -291,12 +272,14 @@ def transcricaoArquivo(file_path, patient_name, method):
 
 
 def gerarResumoDoArquivo(label):
+    # Verifica se a chave OpenAI foi configurada antes de gerar o resumo
+    if not is_openai_key_configured():
+        return "A chave da OpenAI não foi configurada. Insira sua chave na aba 'Configurações' ou selecione o método local."
     transcricao = selecionar_transcricao(label)
     resumo = gerarResumoProntuario(transcricao)
     return resumo
 
 
-# Função para permitir que o usuário escolha o diretório (usando Tkinter)
 def choose_directory():
     import tkinter as tk
     from tkinter import filedialog
@@ -307,7 +290,6 @@ def choose_directory():
     return folder if folder else ""
 
 
-# Nova função que gera o PDF no diretório escolhido
 def save_summary_as_pdf_in_dir(summary, chosen_dir):
     if not summary.strip():
         return "Nenhum resumo para salvar."
@@ -328,12 +310,9 @@ def save_summary_as_pdf_in_dir(summary, chosen_dir):
 def generate_pdf_with_directory(resumo, chosen_dir):
     if not chosen_dir.strip():
         return "<p style='color:red;'>Por favor, escolha um diretório primeiro.</p>"
-
     if not resumo.strip():
         return "<p style='color:red;'>Nenhum resumo para salvar em PDF.</p>"
-
     result = save_summary_as_pdf_in_dir(resumo, chosen_dir)
-
     if not os.path.exists(result):
         return f"<p style='color:red;'>Erro: arquivo PDF não encontrado em {chosen_dir}.</p>"
     try:
@@ -341,28 +320,28 @@ def generate_pdf_with_directory(resumo, chosen_dir):
             pdf_bytes = f.read()
             b64_pdf = base64.b64encode(pdf_bytes).decode("utf-8")
             html_link = f'<a href="data:application/pdf;base64,{b64_pdf}" download="{os.path.basename(result)}">Baixar PDF</a>'
-        # Retorna a mensagem de sucesso e o link de download
         return f"<p style='color:green;'>Resumo gerado com sucesso!</p>{html_link}"
     except Exception as e:
         logging.exception("Erro ao gerar link de download:")
         return f"<p style='color:red;'>Erro ao gerar link de download: {e}</p>"
 
 
+def set_openai_api_key(api_key):
+    openai.api_key = api_key
+    return "API key configurada com sucesso!"
 
-
-# ==================== INTERFACE GRADIO ====================
 
 def start_consulta_interface(patient_name, method):
     if not patient_name.strip():
         return "Preencha o campo 'Nome do Paciente' antes de iniciar a consulta."
+    if method == "openai" and not is_openai_key_configured():
+        return "A chave da OpenAI não foi configurada. Insira sua chave na aba 'Configurações' ou selecione o método local."
     return start_consulta(patient_name, method)
 
-def stop_and_show_transcription(patient_name):
 
+def stop_and_show_transcription(patient_name):
     if not patient_name_global.strip():
         return "A consulta não iniciou, preencha o Nome do Paciente e clique em iniciar a consulta."
-
-    """Stops the consultation and returns the final complete transcription."""
     stop_msg = stop_process(patient_name)
     final_transcription = get_transcription(patient_name)
     return stop_msg + "\n\nTranscrição Final:\n" + final_transcription
@@ -371,10 +350,13 @@ def stop_and_show_transcription(patient_name):
 def start_transcricao_interface(file_obj, patient_name, method):
     if not patient_name.strip():
         return "Preencha o campo 'Nome do Paciente' antes de iniciar a transcrição."
+    if method == "openai" and not is_openai_key_configured():
+        return "A chave da OpenAI não foi configurada. Insira sua chave na aba 'Configurações' ou selecione o método local."
     file_path = file_obj.name if hasattr(file_obj, "name") else file_obj
     return transcricaoArquivo(file_path, patient_name, method)
 
 
+# ==================== INTERFACE GRADIO ====================
 with gr.Blocks() as demo:
     gr.Markdown("# Sistema de Consulta e Transcrição")
     with gr.Row():
@@ -410,22 +392,18 @@ with gr.Blocks() as demo:
         with gr.Row():
             gerar_pdf_btn = gr.Button("💾 Gerar PDF", variant="secondary", elem_classes=["small-button"])
             pdf_link = gr.HTML(visible=False)
-    # Configuração das interações
-    consulta_btn.click(start_consulta_interface, inputs=[patient_name_input, method_choice], outputs=consulta_output)
-    finalizar_consulta_btn.click(stop_and_show_transcription, inputs=[patient_name_input], outputs=consulta_output)
-    atualizar_consulta_btn.click(get_transcription, inputs=[patient_name_input], outputs=consulta_output)
-    transcricao_btn.click(start_transcricao_interface, inputs=[file_input, patient_name_input, method_choice],
-                          outputs=transcricao_output)
-    interromper_transcricao_btn.click(stop_process, inputs=[patient_name_input], outputs=transcricao_output)
-    atualizar_transcricao_btn.click(get_transcription, inputs=[patient_name_input], outputs=transcricao_output)
-    refresh_transcricoes_btn.click(atualizar_lista_transcricoes, outputs=transcricoes_dropdown)
-    transcricoes_dropdown.change(selecionar_transcricao, inputs=transcricoes_dropdown, outputs=transcricao_display)
-    refresh_resumo_btn.click(atualizar_lista_transcricoes, outputs=resumo_dropdown)
-    gerar_resumo_btn.click(gerarResumoDoArquivo, inputs=[resumo_dropdown], outputs=resumo_display)
-    # Botão para escolher diretório
-    dir_button.click(lambda: choose_directory(), inputs=[], outputs=dir_text)
-    # Botão para gerar PDF usando o diretório escolhido
-    gerar_pdf_btn.click(generate_pdf_with_directory, inputs=[resumo_display, dir_text], outputs=pdf_link)
+
+    with gr.Tab("Configurações"):
+        gr.Markdown("### Configurações")
+        openai_key_label = gr.Label("Chave OpenAI")
+        openai_key_input = gr.Textbox(label="Insira sua chave OpenAI", placeholder="Sua API key aqui")
+        save_key_button = gr.Button("Salvar 💾")
+        save_key_output = gr.Textbox(label="Status", interactive=False)
+        instructions_label = gr.HTML("""
+        <p>Para obter sua chave API do OpenAI, acesse: <a href="https://platform.openai.com/account/api-keys" target="_blank">https://platform.openai.com/account/api-keys</a></p>
+        <p>Se ainda não possui uma conta, crie uma, gere sua chave e insira-a no campo acima para usar os recursos de transcrição.</p>
+        """)
+        save_key_button.click(fn=set_openai_api_key, inputs=openai_key_input, outputs=save_key_output)
 
     gr.Markdown("""
     <style>
@@ -437,6 +415,21 @@ with gr.Blocks() as demo:
     </style>
     """)
 
+    # Configuração das interações existentes
+    consulta_btn.click(start_consulta_interface, inputs=[patient_name_input, method_choice], outputs=consulta_output)
+    finalizar_consulta_btn.click(stop_and_show_transcription, inputs=[patient_name_input], outputs=consulta_output)
+    atualizar_consulta_btn.click(get_transcription, inputs=[patient_name_input], outputs=consulta_output)
+    transcricao_btn.click(start_transcricao_interface, inputs=[file_input, patient_name_input, method_choice],
+                          outputs=transcricao_output)
+    interromper_transcricao_btn.click(stop_process, inputs=[patient_name_input], outputs=transcricao_output)
+    atualizar_transcricao_btn.click(get_transcription, inputs=[patient_name_input], outputs=transcricao_output)
+    refresh_transcricoes_btn.click(atualizar_lista_transcricoes, outputs=transcricoes_dropdown)
+    transcricoes_dropdown.change(selecionar_transcricao, inputs=transcricoes_dropdown, outputs=transcricao_display)
+    refresh_resumo_btn.click(atualizar_lista_transcricoes, outputs=resumo_dropdown)
+    gerar_resumo_btn.click(gerarResumoDoArquivo, inputs=[resumo_dropdown], outputs=resumo_display)
+    dir_button.click(lambda: choose_directory(), inputs=[], outputs=dir_text)
+    gerar_pdf_btn.click(generate_pdf_with_directory, inputs=[resumo_display, dir_text], outputs=pdf_link)
+
 # ========== Integração com PyWebView para janela nativa ==========
 if __name__ == "__main__":
     def start_gradio():
@@ -446,6 +439,5 @@ if __name__ == "__main__":
     gradio_thread.start()
     time.sleep(3)
     import webview
-
     webview.create_window("Sistema de Consulta e Transcrição", "http://127.0.0.1:7860", width=1024, height=768)
     webview.start()

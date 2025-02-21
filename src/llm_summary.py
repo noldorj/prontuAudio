@@ -11,29 +11,10 @@ logging.basicConfig(
 
 def gerarResumoProntuario(transcricao):
     """
-    Recebe a transcrição completa e gera um resumo do prontuário com os seguintes tópicos:
-
-    **Dados do Paciente**
-    - Nome do paciente, data da consulta (formato DD/MM/AAAA) e horário (formato HH:MM).
-    - Nome do acompanhante (se identificado).
-
-    **Medicação em Uso**
-    - Liste os nomes e as doses dos medicamentos que o paciente está utilizando.
-
-    **Exames Recentes**
-    - Liste os exames realizados e apresentados durante a consulta.
-
-    **Exames a Marcar**
-    - Liste os exames pedidos e, se informado, a data da próxima consulta sugerida.
-
-    **Resumo da Consulta**
-    - Resuma os principais problemas relatados, possíveis diagnósticos e pontos de atenção.
-
-    **Sugestão de Diagnóstico**
-    - Sugira um diagnóstico para apoio ao médico, indicando exames, procedimentos e pontos de atenção.
-
+    Recebe a transcrição completa e gera um resumo do prontuário.
     Esta função utiliza a API de ChatCompletion da OpenAI com o modelo definido em model_openai para gerar o resumo.
     """
+
     prompt = f"""Você é um especialista em medicina e análise de dados clínicos. Abaixo está a transcrição completa de uma consulta médica.
 Por favor, gere um resumo do prontuário seguindo estes tópicos:
 
