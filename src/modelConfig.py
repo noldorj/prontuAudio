@@ -1,33 +1,36 @@
+
 import os
-import openai
-from dotenv import load_dotenv
-import logging
 
-# Variáveis que definem os modelos para a OpenAI e para LLM local (para resumo)
-model_openai = "gpt-4o"  # Modelo a ser utilizado pela OpenAI para gerar resumos
-model_local_llm = "deepseek-ai/DeepSeek-R1-Distill-Llama-8B"  # Exemplo para LLM local
+# Diretórios base para salvar transcrições, áudios e downloads
+BASE_TRANSCRICOES_DIR = os.path.join(".", "transcricoes")
+BASE_AUDIOS_DIR = os.path.join(".", "audios")
+DOWNLOADS_DIR = os.path.join(".", "downloads")
 
-# Variável de identificação do modelo de ASR
-# model_id = "openai/whisper-small"
-# model_id = "openai/whisper-medium"
-model_id = "openai/whisper-large-v3-turbo"
+# Tempo de chunk para divisão dos áudios (em segundos)
+chunk_tempo = 20
 
-# Variável global que define o tempo dos chunks (em segundos)
-chunk_tempo = 10
+# Modelo para transcrição local (caso utilize a função local de transcrição)
+model_id_transcricao = "openai/whisper-large-v2"  # ou outro modelo adequado para transcrição local
 
-# Variável para definir se o OpenVINO será utilizado (False por padrão)
-USE_OPENVINO = False
+# # Configurações para o modelo de sumarização local via OpenVINO
+# #model_id_openvino = "AIFunOver/Qwen2.5-7B-Instruct-1M-openvino-fp16"
+# model_id_openvino = "Qwen2.5-7B-Instruct-1M-openvino-fp16"
+# model_dir_openvino = "C://Users//noldo\PycharmProjects\prontuAudio\models\models--AIFunOver--Qwen2.5-14B-Instruct-1M-openvino-fp16"
+# #model_id_cpu = "AIFunOver/Qwen2.5-7B-Instruct-1M-openvino-fp16"
+# model_id_cpu = "Qwen2.5-7B-Instruct-1M-openvino-fp16"
+# model_dir_cpu = "C://Users//noldo\PycharmProjects\prontuAudio\models\models--AIFunOver--Qwen2.5-14B-Instruct-1M-openvino-fp16"
 
-# Carrega variáveis de ambiente
-load_dotenv()
-openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Diretórios base
-BASE_TRANSCRICOES_DIR = os.path.abspath(os.path.join(os.getcwd(), ".", "transcricoes"))
+# Para GPU
+model_id_openvino = "hsuwill000/DeepSeek-R1-Distill-Qwen-1.5B-openvino"
+model_dir_openvino = os.path.join("models", "models--AIFunOver--DeepSeek-R1-Distill-Llama-8B-openvino-4bit")
 
-BASE_AUDIOS_DIR = os.path.abspath(os.path.join(os.getcwd(), ".", "audios"))
-DOWNLOADS_DIR = os.path.abspath(os.path.join(os.getcwd(), ".", "downloads"))
-os.makedirs(BASE_TRANSCRICOES_DIR, exist_ok=True)
-os.makedirs(BASE_AUDIOS_DIR, exist_ok=True)
-logging.info("Absolute path for transcriptions: %s", os.path.abspath(BASE_TRANSCRICOES_DIR))
+# Para CPU
+model_id_cpu = "hsuwill000/DeepSeek-R1-Distill-Qwen-1.5B-openvino"
+model_dir_cpu = os.path.join("models", "models--AIFunOver--Qwen2.5-7B-Instruct-1M-openvino-fp16")
+
+# AIFunOver/DeepSeek-R1-Distill-Llama-8B-openvino-8bit
+# deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B
+# hsuwill000/DeepSeek-R1-Distill-Qwen-1.5B-openvino
+
 
