@@ -1,50 +1,67 @@
-# Medical Consultation Transcription and Summary System
+# Medical Record Assistant
 
-This project is a real-time transcription and summarization system designed for medical consultations. It captures and transcribes audio from live consultations (or from pre-recorded audio files) and then uses a language model to generate a structured summary of the consultation (i.e., a medical record summary). The system supports both cloud-based transcription (using OpenAI's Whisper API) and local transcription (using Hugging Face pipelines and FunASR).
+An open-source project designed to empower healthcare professionals with a local, efficient, and privacy-focused solution for managing and summarizing medical records.
 
-## Objective
+---
 
-The goal of this project is to facilitate the creation of digital medical records by automatically transcribing spoken consultations and generating a summarized report. This summary includes key details such as patient information, current medications, recent exams, scheduled exams, and a diagnostic suggestion to support the physician's decision-making.
+## Overview
+
+The Medical Record Assistant aims to:
+- **Streamline medical documentation:** Automatically summarize and manage patient records.
+- **Ensure data privacy:** Operate entirely locally, eliminating the need for cloud-based processing.
+- **Enhance performance:** Leverage Intel hardware optimization to maximize efficiency.
+
+---
 
 ## How It Works
 
-1. **Real-Time Transcription:**  
-   The system captures audio in real time, splitting it into fixed-length chunks (configurable via a global variable). It then transcribes each chunk using either OpenAI’s Whisper API or a local transcription model.
+The system integrates several modules to deliver a robust and flexible solution:
 
-2. **File Transcription:**  
-   Users can also upload an audio file. The system converts the file to WAV format if needed, splits it into chunks, transcribes each chunk, and combines the results into a complete transcription.
+- **Local Execution:** Run directly on your notebook or desktop, ensuring full control over your data.
+- **Openvino genAI Integration:** Utilizes the Openvino genAI toolkit to optimize the execution of Large Language Models (LLMs) on Intel CPUs and GPUs, providing a performance boost while reducing system load.
+- **OpenAI Integration:** Optionally, connect via an OpenAI API key to enhance functionalities with advanced AI capabilities.
 
-3. **Transcription Summary:**  
-   After transcription is complete, the system can generate a summary of the consultation. It reads the transcription file (stored as JSON), then sends the complete text along with a prompt to an LLM (via OpenAI’s ChatCompletion API) to produce a structured summary including:
-   - Patient data (name, consultation date, time, and accompanying person if identified)
-   - Current medications
-   - Recent exams
-   - Exams to be scheduled
-   - Consultation summary (key problems, potential diagnoses, points of attention)
-   - Diagnostic suggestions
+---
 
-4. **User Interface:**  
-   A web interface (built with Gradio) provides three main sections:
-   - **Real-Time Consultation:** Start and stop live transcription.
-   - **File Transcription:** Upload an audio file and receive its transcription.
-   - **Transcription Management & Summary:** List previously generated transcription files and generate a summary for a selected transcription.
+## Modules Utilized
 
-## Modules and Technologies Used
+- **Core Engine:** Handles the main logic for processing and summarizing medical records.
+- **Openvino genAI Module:** Optimizes LLM performance on Intel hardware, enabling efficient local execution.
+- **API Integration:** Manages connectivity with OpenAI for extended functionalities.
+- **User Interface:** A simple and intuitive interface for healthcare professionals.
 
-- **Python 3.8+**
-- **Gradio:** For building the web interface.
-- **SoundDevice & SoundFile:** For capturing and processing real-time audio.
-- **Pydub:** For audio file conversion.
-- **Librosa:** For audio resampling.
-- **OpenAI API:** For transcription (Whisper API) and summary generation via ChatCompletion.
-- **Transformers:** For local transcription pipelines (e.g., using Whisper models) and potential fallback models.
-- **FunASR:** For file transcription with advanced features such as timestamps and speaker diarization.
-- **dotenv:** For managing environment variables (e.g., API keys).
-- **Logging:** For detailed debugging and traceability.
+---
 
-## Installation
+## Openvino genAI for LLMs
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/yourusername/medical-consultation-transcription.git
-   cd medical-consultation-transcription
+This project leverages the **Openvino genAI** toolkit to run LLMs locally on Intel CPUs or GPUs. By doing so, it offers:
+- **Optimized Performance:** Maximizes hardware capabilities to ensure smooth operation even on resource-constrained systems.
+- **Reduced Overhead:** Offloads processing to the GPU, freeing up the CPU for other tasks.
+- **Enhanced Privacy:** Keeps sensitive medical data on local machines, mitigating the risks associated with cloud processing.
+
+---
+
+## Advantages of This Approach
+
+- **Data Security:** Local processing ensures that sensitive patient information never leaves your system.
+- **Cost Efficiency:** Avoid cloud service fees and dependency on external providers.
+- **Performance Optimization:** Improved efficiency with Intel hardware optimizations, allowing for faster and more reliable processing.
+- **Flexibility:** Choose between local execution or leveraging the OpenAI API based on your needs.
+
+---
+
+## Contributions and Development
+
+This project is in continuous development and welcomes:
+- **Contributions:** Code contributions, feature enhancements, and module improvements.
+- **Critiques and Suggestions:** Feedback to improve functionality and user experience.
+- **Community Engagement:** Ideas for new features or optimizations are highly encouraged.
+
+Feel free to open issues or submit pull requests. Your input is valuable in shaping the future of this project!
+
+---
+
+## License
+
+This project is open-source and available under the [MIT License](LICENSE).
+
