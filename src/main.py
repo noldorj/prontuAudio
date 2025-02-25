@@ -136,8 +136,12 @@ def start_process(patient_name, method):
 
 def stop_process(patient_name):
     global audio_thread, transcription_thread
-    if not patient_name.strip():
+
+    logging.info(f"stop_process::  patient_name: {patient_name.strip()}")
+
+    if patient_name == "":
         return "Consulta ainda não foi iniciada."
+
     logging.info("Process stopped.")
     final_transcription = get_transcription(patient_name_global)
     recording_running.clear()
@@ -150,7 +154,7 @@ def stop_process(patient_name):
 
 
 def get_transcription(patient_name):
-    if not patient_name.strip():
+    if patient_name == "":
         return "Consulta ainda não foi iniciada."
     with transcription_lock:
         return "\n".join([f"[{seg['timestamp']}] {seg['text']}" for seg in transcription_data])
@@ -360,7 +364,7 @@ def set_openai_api_key(api_key):
 
 
 def start_consulta_interface(patient_name, method):
-    if not patient_name.strip():
+    if patient_name == "":
         return "Preencha o campo 'Nome do Paciente' antes de iniciar a consulta."
     if method == "openai" and not is_openai_key_configured():
         return "A chave da OpenAI não foi configurada. Insira sua chave na aba 'Configurações' ou selecione o método local."
@@ -368,7 +372,7 @@ def start_consulta_interface(patient_name, method):
 
 
 def stop_and_show_transcription(patient_name):
-    if not patient_name_global.strip():
+    if patient_name_global == "" :
         return "A consulta não iniciou, preencha o Nome do Paciente e clique em iniciar a consulta."
     stop_msg = stop_process(patient_name)
     final_transcription = get_transcription(patient_name)
@@ -383,7 +387,7 @@ def start_transcricao_interface_wrapper(file_obj, patient_name, method):
 # Esta função inicia uma thread que processa o áudio em chunks e atualiza um arquivo JSON com o progresso.
 # O botão "Atualizar Transcrição" lerá este arquivo para atualizar o campo.
 def start_transcricao_interface(file_obj, patient_name, method):
-    if not patient_name.strip():
+    if patient_name == "":
         return ("Preencha o campo 'Nome do Paciente' antes de iniciar a transcrição.", "Progresso: 0%")
     if method == "openai" and not is_openai_key_configured():
         return ("A chave da OpenAI não foi configurada. Insira sua chave na aba 'Configurações' ou selecione o método local.", "Progresso: 0%")
@@ -435,16 +439,17 @@ def ler_transcricao_arquivo():
 
 
 def gerarResumoDoArquivo(label, method):
+    logging.info("gerarResumoDoArquivo:: inicnado gerarResumo")
+
     transcricao = selecionar_transcricao(label)
+
     if method == "openai":
         if not is_openai_key_configured():
             return "A chave da OpenAI não foi configurada. Insira sua chave na aba 'Configurações' ou selecione o método local."
         resumo = gerarResumoProntuario(transcricao, use_local=False)
     else:
-        from llm_summary import openvino_pipeline_global
-        if openvino_pipeline_global is None:
-            return "Modelo OpenVINO ainda está carregando. Por favor, aguarde um instante e tente novamente."
         resumo = gerarResumoProntuario(transcricao, use_local=True)
+
     return resumo
 
 
@@ -459,7 +464,7 @@ def choose_directory():
 
 
 def save_summary_as_pdf_in_dir(summary, chosen_dir):
-    if not summary.strip():
+    if summary == "":
         return "Nenhum resumo para salvar."
     try:
         pdf = FPDF()
@@ -516,7 +521,7 @@ def set_openai_api_key(api_key):
 
 
 def start_consulta_interface(patient_name, method):
-    if not patient_name.strip():
+    if patient_name == "":
         return "Preencha o campo 'Nome do Paciente' antes de iniciar a consulta."
     if method == "openai" and not is_openai_key_configured():
         return "A chave da OpenAI não foi configurada. Insira sua chave na aba 'Configurações' ou selecione o método local."
@@ -524,7 +529,7 @@ def start_consulta_interface(patient_name, method):
 
 
 def stop_and_show_transcription(patient_name):
-    if not patient_name_global.strip():
+    if patient_name_global == "":
         return "A consulta não iniciou, preencha o Nome do Paciente e clique em iniciar a consulta."
     stop_msg = stop_process(patient_name)
     final_transcription = get_transcription(patient_name)
@@ -539,29 +544,31 @@ def start_transcricao_interface_wrapper(file_obj, patient_name, method):
 import threading
 from llm_summary import initialize_openvino_pipeline
 
-
-def preload_openvino():
-    logging.info("Iniciando pré-carregamento do modelo OpenVINO em background...")
-    pipeline_instance = initialize_openvino_pipeline()
-    if pipeline_instance:
-        logging.info("Modelo OpenVINO pré-carregado com sucesso.")
-    else:
-        logging.error("Falha no pré-carregamento do modelo OpenVINO.")
-
-
-threading.Thread(target=preload_openvino, daemon=True).start()
+# def preload_openvino():
+#     logging.info("Iniciando pré-carregamento do modelo OpenVINO em background...")
+#     pipeline_instance = initialize_openvino_pipeline()
+#     if pipeline_instance:
+#         logging.info("Modelo OpenVINO pré-carregado com sucesso.")
+#     else:
+#         logging.error("Falha no pré-carregamento do modelo OpenVINO.")
+#
+#
+# threading.Thread(target=preload_openvino, daemon=True).start()
 
 # Interface Gradio
+
 with gr.Blocks() as demo:
     gr.Markdown("# Sistema de Consulta e Transcrição")
     with gr.Row():
         patient_name_input = gr.Textbox(label="Nome do Paciente", placeholder="Digite o nome do paciente")
         method_choice = gr.Radio(["openai", "local"], label="Método", value="openai")
+
     with gr.Tab("Consulta em Tempo Real"):
         consulta_btn = gr.Button("Iniciar Consulta")
         finalizar_consulta_btn = gr.Button("Finalizar Consulta")
         consulta_output = gr.Textbox(label="Saída da Consulta", lines=10)
         atualizar_consulta_btn = gr.Button("🔄 Atualizar Transcrição")
+
     with gr.Tab("Transcrição de Áudio"):
         file_input = gr.File(label="Arquivo de Áudio")
         transcricao_btn = gr.Button("Iniciar Transcrição")
@@ -569,15 +576,19 @@ with gr.Blocks() as demo:
         atualizar_transcricao_btn = gr.Button("🔄 Atualizar Transcrição")
         transcricao_output = gr.Textbox(label="Transcrição Completa", lines=10, show_copy_button=True)
         progress_output = gr.Textbox(label="Progresso", lines=1, interactive=False)
+
     with gr.Tab("Transcrições Efetuadas"):
         transcricoes_dropdown = gr.Dropdown(label="Transcrições Efetuadas", choices=[], multiselect=False)
         refresh_transcricoes_btn = gr.Button("Atualizar Lista")
         transcricao_display = gr.Textbox(label="Conteúdo da Transcrição", lines=10, show_copy_button=True)
+
     with gr.Tab("Resumo do Prontuário"):
         resumo_dropdown = gr.Dropdown(label="Selecione a Transcrição", choices=[], multiselect=False)
         refresh_resumo_btn = gr.Button("Atualizar Lista")
         gerar_resumo_btn = gr.Button("Gerar Resumo")
+
         resumo_display = gr.Textbox(label="Resumo do Prontuário", lines=10, show_copy_button=True)
+
         with gr.Row():
             dir_button = gr.Button("📁 Escolher Diretório", elem_classes=["small-button"])
             dir_text = gr.Textbox(label="Diretório Selecionado", interactive=False, show_copy_button=True)

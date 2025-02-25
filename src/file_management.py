@@ -4,7 +4,7 @@ import json
 import logging
 import gradio as gr
 from utils import get_metadata
-from modelConfig import BASE_TRANSCRICOES_DIR, BASE_AUDIOS_DIR, DOWNLOADS_DIR
+from modelConfig import BASE_TRANSCRICOES_DIR
 
 logging.basicConfig(
     level=logging.INFO,
